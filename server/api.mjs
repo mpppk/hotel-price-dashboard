@@ -99,7 +99,7 @@ async function readHotel(request, env, hotelId, action) {
     "SELECT MAX(observed_at) AS last_observed_at FROM crawl_runs WHERE hotel_id=? AND pricing_profile_id=?"
   ).bind(hotelId, profile).first();
   return json({
-    hotelId, hotelName: HOTEL_NAME, sourceUrl: HOTEL_URL, pricingProfileId: profile,
+    hotelId, pricingProfileId: profile,
     currentMinimum: minDay?.price ?? null,
     currentMinimumStayDate: minDay?.stayDate ?? null,
     availableDays: available.length, coveredDays: days.length,

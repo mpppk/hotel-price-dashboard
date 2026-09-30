@@ -21,6 +21,26 @@ tags:
     description: Read APIs used by the dashboard
 
 paths:
+  /api/v1/health:
+    get:
+      tags: [Hotels]
+      summary: Health check (D1 binding presence is checked)
+      operationId: getHealth
+      responses:
+        '200':
+          description: API is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  additionalProperties: false
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /api/v1/ingest/snapshots:
     post:
       tags: [Ingest]
