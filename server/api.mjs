@@ -29,10 +29,21 @@ async function ingest(request, env) {
   const inserts = [
     env.DB.prepare("INSERT INTO crawl_runs (id,hotel_id,pricing_profile_id,observed_at,ingested_at,crawler_version,payload_sha256,observation_count) VALUES (?,?,?,?,?,?,?,?)")
       .bind(data.runId, data.hotelId, data.pricingProfileId, data.observedAt, new Date().toISOString(), data.crawlerVersion, sha, data.observations.length),
-    ...data.observations.map(o =>
-      env.DB.prepare("INSERT INTO price_observations (hotel_id,pricing_profile_id,run_id,stay_date,available,price_jpy,room_name,plan_name,source_url,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-        .bind(data.hotelId, data.pricingProfileId, data.runId, o.stayDate, Number(o.available), o.price, o.roomName, o.planName, o.sourceUrl, data.observedAt)),
   ];
+  // D1 permits at most 100 bound parameters per query. Ten 10-column rows
+  // per INSERT keep a 400-day snapshot at 41 write statements (plus one read).
+  // A single D1.batch preserves atomic run+observation writes.
+  for (let i = 0; i < data.observations.length; i += 10) {
+    const group = data.observations.slice(i, i + 10);
+    const placeholders = group.map(() => "(?,?,?,?,?,?,?,?,?,?)").join(",");
+    const values = group.flatMap(o => [
+      data.hotelId, data.pricingProfileId, data.runId, o.stayDate,
+      Number(o.available), o.price, o.roomName, o.planName, o.sourceUrl, data.observedAt,
+    ]);
+    inserts.push(env.DB.prepare(
+      "INSERT INTO price_observations (hotel_id,pricing_profile_id,run_id,stay_date,available,price_jpy,room_name,plan_name,source_url,observed_at) VALUES " + placeholders
+    ).bind(...values));
+  }
   try {
     // D1.batch executes statements in one transaction; no partially ingested runs.
     await env.DB.batch(inserts);
