@@ -47,7 +47,7 @@ type History = { stayDate: string; observations: Observation[] };
 async function load<T>(path: string, signal: AbortSignal): Promise<T> {
   const r = await fetch(path, { signal, cache: "no-store" });
   if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
+    const body = await r.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(body?.error?.message || "APIエラー " + r.status);
   }
   return r.json() as Promise<T>;
