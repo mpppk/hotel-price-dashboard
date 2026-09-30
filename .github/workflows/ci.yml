@@ -1,0 +1,29 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - name: Verify migration on SQLite
+        run: |
+          python3 - <<'PY'
+          import sqlite3, pathlib
+          sql = pathlib.Path("drizzle/0000_init.sql").read_text().replace("--> statement-breakpoint", "")
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys = ON")
+          db.executescript(sql)
+          assert db.execute("SELECT COUNT(*) FROM hotels").fetchone()[0] == 1
+          assert db.execute("SELECT COUNT(*) FROM pricing_profiles").fetchone()[0] == 1
+          print("migration OK")
+          PY
+      - run: npm run typecheck
+      - run: npm run build
