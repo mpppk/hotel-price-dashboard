@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -31,6 +31,6 @@
     "wrangler": "4.92.0",
     "@vitejs/plugin-rsc": "0.5.26",
     "@vitejs/plugin-react": "6.0.2",
-    "react-server-dom-webpack": "19.2.6"
+    "react-server-dom-webpack": "19.2.8"
   }
 }
