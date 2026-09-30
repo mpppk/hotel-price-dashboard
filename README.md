@@ -7,7 +7,7 @@
 ## 構成
 
 - ChatGPT Sites: Vinext + Reactダッシュボード、WorkerのAPIエンドポイント
-- Sites D1 binding: \`DB\`
+- Sites D1 binding: `DB`
 - ローカルクローラ: 一休価格取得、各宿泊日の最安販売価格計算、正規化、認証付きPOST
 - 任意SQL API・Apify・外部Cloudflare Workerは不使用
 
@@ -17,28 +17,28 @@ API契約は [openapi.yaml](./openapi.yaml)、設計書は [docs/specification.m
 
 Node.js 22.13以降が必要です。
 
-\`\`\`sh
+```sh
 npm install
 cp .env.example .dev.vars # 生成したランダムトークンに置換すること
 npm test
 npm run typecheck
 npm run build
 npm run dev
-\`\`\`
+```
 
-ローカルDBはD1 binding \`DB\` を使います。マイグレーション \`drizzle/\` はSitesにパッケージングされます。ローカルD1にスキーマが未適用なら、利用環境のWrangler/Miniflareから \`drizzle/0000_init.sql\` を適用してください。
+ローカルDBはD1 binding `DB` を使います。マイグレーション `drizzle/` はSitesにパッケージングされます。ローカルD1にスキーマが未適用なら、利用環境のWrangler/Miniflareから `drizzle/0000_init.sql` を適用してください。
 
 ## API
 
-\`\`\`http
+```http
 POST /api/v1/ingest/snapshots
 Authorization: Bearer <INGEST_TOKEN>
 Content-Type: application/json
-\`\`\`
+```
 
 サンプル:
 
-\`\`\`sh
+```sh
 curl -fSs -X POST 'https://YOUR-SITE.chatgpt.site/api/v1/ingest/snapshots' \
   -H "Authorization: Bearer $INGEST_TOKEN" \
   -H 'Content-Type: application/json' \
@@ -57,7 +57,19 @@ curl -fSs -X POST 'https://YOUR-SITE.chatgpt.site/api/v1/ingest/snapshots' \
       "sourceUrl":"https://www.ikyu.com/00002777/"
     }]
   }'
-\`\`\`
+```
 
-同一 \`runId\`・同内容は \`already_processed\` で成功、異なる内容は409です。
+同一 `runId`・同内容は `already_processed` で成功、異なる内容は409です。
 データ取得方法は本リポジトリのスコープ外です。
+
+## Sitesへのデプロイ
+
+初回Site作成は [作成依頼文](./docs/SITES_DEPLOY_PROMPT.md) を ChatGPT Work / @Sites に渡してください。Secretを設定する前に公開デプロイしないでください。
+
+```sh
+SITE_URL=https://<your-site>.chatgpt.site npm run smoke:read
+# 実際のクローラが取得した値でのみ書き込み試験すること
+SITE_URL=https://<your-site>.chatgpt.site SNAPSHOT_FILE=/path/to/real-snapshot.json npm run smoke:ingest
+```
+
+書き込み試験には、別途ローカル環境変数 `INGEST_TOKEN` が必要です。
