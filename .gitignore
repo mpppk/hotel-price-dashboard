@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.next/
+.wrangler/
+.env*
+!.env.example
+.dev.vars
+.DS_Store
+*.tsbuildinfo
