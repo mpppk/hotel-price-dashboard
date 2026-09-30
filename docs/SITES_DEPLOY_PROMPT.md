@@ -1,11 +1,11 @@
 # ChatGPT Sites 初回デプロイ用指示
 
-この文書は、GitHubのCIとコードレビュー済みの \`main\` を、**ChatGPT Sitesで初めてSite化するとき**の手順です。
+この文書は、GitHubのCIとコードレビュー済みの `main` を、**ChatGPT Sitesで初めてSite化するとき**の手順です。
 Sitesは「保存バージョン作成」と「公開デプロイ」が別操作です。初回はバージョン保存までで止めます。
 
 ## ChatGPT Work / @Sites に渡す依頼文
 
-\`\`\`text
+```text
 @Sites
 
 GitHub の mpppk/hotel-price-dashboard リポジトリ（main の最新commit）を使って、
@@ -23,30 +23,30 @@ GitHub の mpppk/hotel-price-dashboard リポジトリ（main の最新commit）
   トークン値を会話、GitHub、ファイル、URL、ログに入れないでください。
 - 最後に、Site管理画面への導線、DB初期化結果、保存したバージョン、
   Secret登録後に必要なデプロイ操作を報告してください。
-\`\`\`
+```
 
 ## Site作成後（オーナー作業）
 
 1. ChatGPT の Sites一覧を開き、作成したSiteの **More actions > Settings** に移動する。
-2. **Hosted Secret** として \`INGEST_TOKEN\` を追加する。32文字以上の暗号学的にランダムな値を推奨。トークンを会話に貼らない。
+2. **Hosted Secret** として `INGEST_TOKEN` を追加する。32文字以上の暗号学的にランダムな値を推奨。トークンを会話に貼らない。
 3. 保存済みバージョンを再デプロイして、Secretがランタイムに反映されたことを確認する。
 4. 公開対象を確認する。外部の認証なしクローラからAPIにアクセスするには、Site公開設定が外部HTTPSアクセスを許可する必要がある。個人用ダッシュボードの公開範囲に注意する。
 5. 取得した本番URLで次の読み取りテストを実行する。
 
-\`\`\`sh
+```sh
 SITE_URL=https://<your-site>.chatgpt.site npm run smoke:read
-\`\`\`
+```
 
 6. **実際の一休クローラが取得したデータ**を使って書き込み確認する。ダミー価格の投入は禁止（履歴が汚染されるため）。
 
-\`\`\`sh
+```sh
 SITE_URL=https://<your-site>.chatgpt.site \
 INGEST_TOKEN=<set-locally-without-shell-history> \
 SNAPSHOT_FILE=/absolute/path/to/actual-crawler-snapshot.json \
 npm run smoke:ingest
-\`\`\`
+```
 
-上記 \`INGEST_TOKEN\` 表記は概念上のプレースホルダーです。実際はシェルの安全な方法で
+上記 `INGEST_TOKEN` 表記は概念上のプレースホルダーです。実際はシェルの安全な方法で
 トークンを環境に渡し、GitHubやシェル履歴に残さないでください。
 
 7. ブラウザで価格カレンダーと価格履歴を確認する。
@@ -64,6 +64,6 @@ npm run smoke:ingest
 
 ## API
 
-- 取得サンプル: \`README.md\`
-- クライアント契約: \`openapi.yaml\`
-- スモークテスト: \`scripts/smoke-test.mjs\`
+- 取得サンプル: `README.md`
+- クライアント契約: `openapi.yaml`
+- スモークテスト: `scripts/smoke-test.mjs`
