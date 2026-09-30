@@ -4,7 +4,7 @@ import { handleApi } from "../server/api.mjs";
 
 const secret="abcdefghijklmnopqrstuvwxyz0123456789abcdef";
 class FakeDB {
-  constructor(){ this.runs=new Map(); this.observations=[]; }
+  constructor(){ this.runs=new Map(); this.observations=[]; this.batchStatementCount=0; }
   prepare(sql) { return {
     bind: (...args) => ({
       sql,args,
@@ -23,7 +23,11 @@ class FakeDB {
     const [s,...obs]=statements;
     if(this.runs.has(s.args[0])) throw Error("UNIQUE constraint");
     this.runs.set(s.args[0],{payload_sha256:s.args[6],observation_count:s.args[7]});
-    this.observations.push(...obs.map(x=>x.args));
+    this.batchStatementCount=statements.length;
+    for (const stmt of obs) {
+      assert.ok(stmt.args.length <= 100, "D1 parameter limit");
+      for (let i=0;i<stmt.args.length;i+=10) this.observations.push(stmt.args.slice(i,i+10));
+    }
   }
 }
 const payload = () => ({
@@ -69,4 +73,19 @@ test("read endpoints validate requested date and hotel",async()=>{
   assert.equal((await handleApi(new Request(base+"history?stayDate=bad"),env)).status,400);
   assert.equal((await handleApi(new Request(base+"calendar?from=2026-10-01&to=2026-09-01"),env)).status,400);
   assert.equal((await handleApi(new Request("https://example.test/api/v1/hotels/nope/summary"),env)).status,404);
+});
+
+test("400 observation dates use at most 41 write statements",async()=>{
+  const db=new FakeDB(),env={DB:db,INGEST_TOKEN:secret};
+  const p=payload();
+  p.runId="max-400";
+  p.observations=Array.from({length:400},(_,i)=>({
+    stayDate:new Date(Date.UTC(2027,0,1+i)).toISOString().slice(0,10),
+    available:true,price:100000+i,
+  }));
+  const response=await handleApi(post(p),env);
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).observations,400);
+  assert.equal(db.observations.length,400);
+  assert.equal(db.batchStatementCount,41);
 });
