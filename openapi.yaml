@@ -1,0 +1,539 @@
+openapi: 3.1.0
+info:
+  title: Hotel Price Dashboard API
+  version: 1.0.0
+  description: |
+    API contract for ingesting externally crawled hotel price snapshots into
+    ChatGPT Sites D1 and reading normalized dashboard data.
+
+    MVP hotel: The Ritz-Carlton, Nikko.
+servers:
+  - url: https://{siteHost}
+    variables:
+      siteHost:
+        default: example.chatgpt.site
+        description: Deployed ChatGPT Site hostname
+
+tags:
+  - name: Ingest
+    description: External crawler ingestion API
+  - name: Hotels
+    description: Read APIs used by the dashboard
+
+paths:
+  /api/v1/ingest/snapshots:
+    post:
+      tags: [Ingest]
+      summary: Ingest one hotel price snapshot run
+      operationId: ingestSnapshot
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestSnapshotRequest'
+            examples:
+              default:
+                value:
+                  schemaVersion: 1
+                  runId: 0199a9fc-0000-7000-8000-000000000000
+                  crawlerVersion: 1.2.0
+                  hotelId: ritz-carlton-nikko
+                  pricingProfileId: standard-2a-1r-1n
+                  observedAt: '2026-09-30T21:00:12Z'
+                  observations:
+                    - stayDate: '2026-10-01'
+                      available: true
+                      price: 106000
+                      roomName: 男体山ビュー
+                      planName: 素泊まり
+                      sourceUrl: https://www.ikyu.com/00002777/
+                    - stayDate: '2026-10-02'
+                      available: false
+                      price: null
+                      roomName: null
+                      planName: null
+                      sourceUrl: https://www.ikyu.com/00002777/
+      responses:
+        '200':
+          description: Snapshot accepted or already processed idempotently
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestSnapshotResponse'
+              examples:
+                accepted:
+                  value:
+                    runId: 0199a9fc-0000-7000-8000-000000000000
+                    status: accepted
+                    observations: 365
+                alreadyProcessed:
+                  value:
+                    runId: 0199a9fc-0000-7000-8000-000000000000
+                    status: already_processed
+                    observations: 365
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Same runId was previously processed with different content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: RUN_ID_CONFLICT
+                  message: runId was already processed with different content
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/hotels/{hotelId}/summary:
+    get:
+      tags: [Hotels]
+      summary: Get current dashboard summary for a hotel
+      operationId: getHotelSummary
+      parameters:
+        - $ref: '#/components/parameters/HotelId'
+        - $ref: '#/components/parameters/PricingProfileId'
+      responses:
+        '200':
+          description: Current summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/hotels/{hotelId}/calendar:
+    get:
+      tags: [Hotels]
+      summary: Get latest price for each stay date in a date range
+      operationId: getHotelCalendar
+      parameters:
+        - $ref: '#/components/parameters/HotelId'
+        - $ref: '#/components/parameters/PricingProfileId'
+        - name: from
+          in: query
+          required: true
+          description: Inclusive stay date lower bound
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Inclusive stay date upper bound
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Latest observations by stay date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/hotels/{hotelId}/history:
+    get:
+      tags: [Hotels]
+      summary: Get observation history for one stay date
+      operationId: getHotelPriceHistory
+      parameters:
+        - $ref: '#/components/parameters/HotelId'
+        - $ref: '#/components/parameters/PricingProfileId'
+        - name: stayDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Historical observations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: INGEST_TOKEN stored as a ChatGPT Sites Hosted Secret
+
+  parameters:
+    HotelId:
+      name: hotelId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: ritz-carlton-nikko
+
+    PricingProfileId:
+      name: pricingProfileId
+      in: query
+      required: false
+      description: |
+        Pricing profile used for the read. Defaults to the hotel's configured
+        default pricing profile.
+      schema:
+        type: string
+      example: standard-2a-1r-1n
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_PAYLOAD
+              message: observations[12].price must be a positive integer
+
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Unauthorized
+
+    NotFound:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+
+    InternalServerError:
+      description: Unexpected server or D1 error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: Internal server error
+
+    ServiceUnavailable:
+      description: Temporary backend unavailability; caller may retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: SERVICE_UNAVAILABLE
+              message: Service temporarily unavailable
+
+  schemas:
+    IngestSnapshotRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - runId
+        - hotelId
+        - pricingProfileId
+        - observedAt
+        - observations
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        runId:
+          type: string
+          minLength: 1
+          description: |
+            Idempotency key generated by the crawler. Re-sending the exact same
+            run returns already_processed; reusing it with different content
+            returns 409.
+        crawlerVersion:
+          type:
+            - string
+            - 'null'
+        hotelId:
+          type: string
+          enum:
+            - ritz-carlton-nikko
+        pricingProfileId:
+          type: string
+          enum:
+            - standard-2a-1r-1n
+        observedAt:
+          type: string
+          format: date-time
+        observations:
+          type: array
+          minItems: 1
+          maxItems: 400
+          items:
+            $ref: '#/components/schemas/PriceObservationInput'
+          description: stayDate values must be unique within one request.
+
+    PriceObservationInput:
+      type: object
+      additionalProperties: false
+      required:
+        - stayDate
+        - available
+        - price
+      properties:
+        stayDate:
+          type: string
+          format: date
+        available:
+          type: boolean
+        price:
+          description: |
+            JPY total selling price for the configured pricing profile.
+            Must be a positive integer when available=true. Null is allowed when
+            available=false.
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        roomName:
+          type:
+            - string
+            - 'null'
+        planName:
+          type:
+            - string
+            - 'null'
+        sourceUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+
+    IngestSnapshotResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - runId
+        - status
+        - observations
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum:
+            - accepted
+            - already_processed
+        observations:
+          type: integer
+          minimum: 0
+
+    HotelSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - hotelId
+        - pricingProfileId
+        - currentMinimum
+        - currentMinimumStayDate
+        - availableDays
+        - coveredDays
+        - lastObservedAt
+      properties:
+        hotelId:
+          type: string
+        pricingProfileId:
+          type: string
+        currentMinimum:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        currentMinimumStayDate:
+          anyOf:
+            - type: string
+              format: date
+            - type: 'null'
+        availableDays:
+          type: integer
+          minimum: 0
+        coveredDays:
+          type: integer
+          minimum: 0
+        lastObservedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+
+    CalendarResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - hotelId
+        - pricingProfileId
+        - from
+        - to
+        - days
+      properties:
+        hotelId:
+          type: string
+        pricingProfileId:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDay'
+
+    CalendarDay:
+      type: object
+      additionalProperties: false
+      required:
+        - stayDate
+        - available
+        - price
+        - observedAt
+      properties:
+        stayDate:
+          type: string
+          format: date
+        available:
+          type: boolean
+        price:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        observedAt:
+          type: string
+          format: date-time
+        roomName:
+          type:
+            - string
+            - 'null'
+        planName:
+          type:
+            - string
+            - 'null'
+        previousPrice:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        historicalMinimum:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        historicalMaximum:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+
+    HistoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - hotelId
+        - pricingProfileId
+        - stayDate
+        - observations
+      properties:
+        hotelId:
+          type: string
+        pricingProfileId:
+          type: string
+        stayDate:
+          type: string
+          format: date
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoricalObservation'
+
+    HistoricalObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - observedAt
+        - available
+        - price
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+        available:
+          type: boolean
+        price:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        roomName:
+          type:
+            - string
+            - 'null'
+        planName:
+          type:
+            - string
+            - 'null'
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
